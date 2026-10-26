@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Earpiece Setup</title>
+<style>
+  :root { --bg:#0b0f14; --card:#141b24; --line:#223040; --text:#e6edf3; --dim:#8b98a5; --hit:#22d3a6; --hot:#ffd166; --bad:#ff6b6b; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  .wrap { max-width:860px; margin:0 auto; padding:20px 16px 80px; }
+  h1 { margin:0 0 4px; font-size:28px; } h1 span { color:var(--hit); }
+  h2 { font-size:18px; margin:0 0 4px; }
+  .sub, .hint { color:var(--dim); font-size:14px; margin:0 0 12px; }
+  section { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; margin:14px 0; }
+  label { display:block; font-size:13px; color:var(--dim); margin:10px 0 4px; }
+  input, textarea, select { width:100%; background:#0e141b; color:var(--text); border:1px solid var(--line); border-radius:8px; padding:8px 10px; font:inherit; font-size:15px; }
+  textarea { min-height:80px; resize:vertical; }
+  textarea.big { min-height:160px; }
+  textarea.code { font:13px/1.4 ui-monospace, Menlo, monospace; min-height:260px; }
+  .row { display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:0 12px; }
+  .packs { display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:6px; }
+  .packs label { display:flex; gap:8px; align-items:center; color:var(--text); font-size:15px; margin:0; padding:8px 10px; border:1px solid var(--line); border-radius:8px; cursor:pointer; }
+  .packs input { width:auto; }
+  .job { border:1px solid var(--line); border-radius:8px; padding:4px 12px 12px; margin:10px 0; position:relative; }
+  .job .x { position:absolute; top:8px; right:8px; }
+  button { background:#1d2733; color:var(--text); border:1px solid var(--line); border-radius:8px; padding:8px 14px; font:inherit; font-size:15px; cursor:pointer; }
+  button.primary { background:var(--hit); color:#06261d; border-color:var(--hit); font-weight:600; }
+  button.small { padding:3px 9px; font-size:13px; }
+  .actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  .chip { font-size:13px; border:1px solid var(--line); border-radius:999px; padding:2px 10px; color:var(--dim); }
+  .chip.you { color:var(--hit); border-color:var(--hit); }
+  #msg { min-height:20px; font-size:14px; margin-top:8px; }
+  #msg.ok { color:var(--hit); } #msg.err { color:var(--bad); }
+  a { color:var(--hit); }
+  ol { padding-left:20px; color:var(--dim); font-size:14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🎧 <span>Earpiece</span> setup</h1>
+  <p class="sub">Build your cue cards from your resume and the job. Everything stays in this browser. Nothing is uploaded. <a href="index.html">← back to Earpiece</a></p>
+
+  <section>
+    <h2>1 · The interview</h2>
+    <div class="row">
+      <div><label>Your name</label><input id="name" placeholder="Alex Rivera"></div>
+      <div><label>Job title</label><input id="role" placeholder="IT Support Specialist"></div>
+      <div><label>Company</label><input id="company" placeholder="Acme Health"></div>
+      <div><label>Speech language</label><select id="lang">
+        <option value="en-US">English (US)</option><option value="en-GB">English (UK)</option><option value="en-AU">English (AU)</option><option value="en-IN">English (India)</option>
+        <option value="es-ES">Español</option><option value="fr-FR">Français</option><option value="de-DE">Deutsch</option><option value="pt-BR">Português (BR)</option>
+      </select></div>
+    </div>
+    <label>Job type (pick every one that fits; these add starter cards with keywords and talking points)</label>
+    <div class="packs" id="packs"></div>
+  </section>
+
+  <section>
+    <h2>2 · Your jobs (from your resume)</h2>
+    <p class="hint">Each job becomes a card that pops when the interviewer says the company's name. Write one talking point per line and keep each one short.</p>
+    <div id="jobs"></div>
+    <button class="small" id="addJob">+ Add job</button>
+  </section>
+
+  <section>
+    <h2>3 · Your answers</h2>
+    <p class="hint">Optional. Fill these in to replace the starter tips with your own words. One point per line.</p>
+    <div class="row">
+      <div><label>Tell me about yourself</label><textarea id="ans_about" placeholder="5 yrs IT support · CompTIA A+&#10;Current: help desk at …&#10;Why this role: …"></textarea></div>
+      <div><label>Strengths</label><textarea id="ans_strengths"></textarea></div>
+      <div><label>Weakness</label><textarea id="ans_weakness"></textarea></div>
+      <div><label>Salary</label><textarea id="ans_salary" placeholder="Posted range: …&#10;&quot;I'm looking at around …&quot;"></textarea></div>
+      <div><label>Certifications / education</label><textarea id="ans_certs"></textarea></div>
+      <div><label>Side projects</label><textarea id="ans_projects"></textarea></div>
+      <div><label>Proudest achievement</label><textarea id="ans_proud"></textarea></div>
+      <div><label>Questions you'll ask them</label><textarea id="ans_questions"></textarea></div>
+    </div>
+    <label>About the company (facts to mention)</label><textarea id="co_facts" placeholder="Founded 1990, 3 locations&#10;Mission: …"></textarea>
+    <label>Why you want this job</label><textarea id="co_why"></textarea>
+    <label>The job itself (main duties)</label><textarea id="co_job"></textarea>
+  </section>
+
+  <section>
+    <h2>4 · Optional: let an AI write more cards</h2>
+    <p class="hint">Paste your resume and the job posting. Copy the prompt into ChatGPT, Claude or any AI chat, then paste its answer back here.</p>
+    <label>Resume (text)</label><textarea id="resume" class="big"></textarea>
+    <label>Job posting (text)</label><textarea id="posting" class="big"></textarea>
+    <div class="actions"><button id="copyPrompt">📋 Copy AI prompt</button></div>
+    <label>Paste the AI's answer (JSON)</label><textarea id="aiCards" class="code" style="min-height:120px" placeholder='[{"t":"…","k":["…"],"a":["…"]}]'></textarea>
+  </section>
+
+  <section>
+    <h2>5 · Build</h2>
+    <div class="actions">
+      <button class="primary" id="build">Build my cards</button>
+      <button id="save">💾 Save &amp; open Earpiece</button>
+      <button id="download">⬇ Download my-cards.json</button>
+      <button id="upload">⬆ Load a deck file</button><input type="file" id="file" accept=".json" hidden>
+      <button id="reset">Use example deck</button>
+    </div>
+    <div id="msg"></div>
+    <div class="chips" id="chips"></div>
+    <label>Your deck: edit freely. Keywords are regular expressions matched on whole words. <code>top</code> boosts a card, <code>low</code> shows it only when nothing else matches.</label>
+    <textarea id="deck" class="code"></textarea>
+    <ol>
+      <li><b>Save &amp; open Earpiece</b> keeps the deck in this browser.</li>
+      <li>Or download it as <code>my-cards.json</code> into the Earpiece folder. It's git-ignored, so your resume never gets committed.</li>
+    </ol>
+  </section>
+</div>
+
+<script src="packs.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const PACKS = window.EARPIECE_PACKS;
+const FIELDS = ["name", "role", "company", "lang", "ans_about", "ans_strengths", "ans_weakness", "ans_salary", "ans_certs", "ans_projects", "ans_proud", "ans_questions", "co_facts", "co_why", "co_job", "resume", "posting", "aiCards"];
+const lines = s => (s || "").split("\n").map(x => x.trim()).filter(Boolean);
+const reEsc = s => s.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const msg = (t, ok = true) => { $("msg").textContent = t; $("msg").className = ok ? "ok" : "err"; };
+
+// --- form state (kept in this browser so you can come back and tweak) ---
+Object.entries(PACKS).forEach(([id, p]) => {
+  $("packs").insertAdjacentHTML("beforeend", `<label><input type="checkbox" value="${id}" ${id === "behavioral" ? "checked" : ""}> ${p.name} <span style="color:var(--dim);font-size:12px">(${p.cards.length})</span></label>`);
+});
+function addJob(j = {}) {
+  const el = document.createElement("div");
+  el.className = "job";
+  el.innerHTML = `<button class="small x" title="Remove">✕</button>
+    <div class="row"><div><label>Company</label><input class="j_co" placeholder="Contoso"></div>
+    <div><label>Your title</label><input class="j_title" placeholder="Help Desk Tech"></div>
+    <div><label>Years</label><input class="j_years" placeholder="2021–24"></div></div>
+    <label>Talking points (one per line)</label><textarea class="j_points" placeholder="Closed 40 tickets/day, 95% CSAT&#10;Trained 5 new hires"></textarea>
+    <label>Other ways it might be said or misheard (optional, comma-separated)</label><input class="j_alias" placeholder="contoso ltd, can toso">`;
+  el.querySelector(".j_co").value = j.co || ""; el.querySelector(".j_title").value = j.title || "";
+  el.querySelector(".j_years").value = j.years || ""; el.querySelector(".j_points").value = j.points || "";
+  el.querySelector(".j_alias").value = j.alias || "";
+  el.querySelector(".x").onclick = () => { el.remove(); persist(); };
+  $("jobs").appendChild(el);
+}
+const readJobs = () => [...document.querySelectorAll(".job")].map(el => ({
+  co: el.querySelector(".j_co").value.trim(), title: el.querySelector(".j_title").value.trim(),
+  years: el.querySelector(".j_years").value.trim(), points: el.querySelector(".j_points").value, alias: el.querySelector(".j_alias").value }));
+const readPacks = () => [...document.querySelectorAll("#packs input:checked")].map(i => i.value);
+function persist() {
+  const s = { jobs: readJobs(), packs: readPacks() };
+  FIELDS.forEach(f => s[f] = $(f).value);
+  try { localStorage.setItem("earpiece.setup", JSON.stringify(s)); } catch (_) {}
+}
+function restore() {
+  let s = null;
+  try { s = JSON.parse(localStorage.getItem("earpiece.setup")); } catch (_) {}
+  if (!s) { addJob(); return; }
+  FIELDS.forEach(f => { if (s[f] != null) $(f).value = s[f]; });
+  document.querySelectorAll("#packs input").forEach(i => i.checked = (s.packs || []).includes(i.value));
+  (s.jobs && s.jobs.length ? s.jobs : [{}]).forEach(addJob);
+}
+restore();
+document.addEventListener("input", persist);
+$("addJob").onclick = () => { addJob(); persist(); };
+
+// --- build the deck ---
+const OVERRIDES = { ans_about: "Tell me about yourself", ans_strengths: "Your strengths", ans_weakness: "Weakness", ans_salary: "Salary",
+  ans_certs: "Certifications / education", ans_projects: "Side projects", ans_proud: "Proudest achievement", ans_questions: "Your questions + closing" };
+
+function buildDeck() {
+  const name = $("name").value.trim(), role = $("role").value.trim(), company = $("company").value.trim();
+  const cards = [], seen = new Map();
+  const put = c => { if (seen.has(c.t)) cards[seen.get(c.t)] = c; else { seen.set(c.t, cards.length); cards.push(c); } };
+
+  readPacks().forEach(p => PACKS[p].cards.forEach(c => put(JSON.parse(JSON.stringify(c)))));
+
+  // Your own words replace the starter tips.
+  Object.entries(OVERRIDES).forEach(([f, t]) => {
+    const a = lines($(f).value); if (!a.length) return;
+    const c = cards[seen.get(t)] || { t, k: [t.toLowerCase()] };
+    put({ ...c, a });
+  });
+  if (name && seen.has("Tell me about yourself")) {
+    const c = cards[seen.get("Tell me about yourself")];
+    c.k = [...(c.k || []), "who is " + reEsc(name.split(" ")[0])];
+  }
+
+  // One card per job on the resume, triggered by the company name.
+  readJobs().filter(j => j.co).forEach(j => {
+    const co = j.co.toLowerCase();
+    const k = [reEsc(co)];
+    const squashed = co.replace(/[^a-z0-9]/g, "");
+    if (squashed !== co) k.push(reEsc(squashed));
+    const g = j.alias.split(",").map(s => s.trim()).filter(Boolean).map(reEsc);
+    const pts = lines(j.points);
+    put({ t: [j.co, j.title, j.years].filter(Boolean).join(" · "), k, ...(g.length ? { g } : {}), a: pts.length ? pts : ["What you did", "One number", "What you learned"], top: true });
+  });
+
+  // The company + this job.
+  if (company) {
+    const co = reEsc(company.toLowerCase());
+    const facts = lines($("co_facts").value), why = lines($("co_why").value);
+    if (facts.length) put({ t: "About " + company, k: [`what do you know about (us|the company|${co})`, "know about (us|the company)", "about (the|our) (company|organization)", "about us", "research(ed)? (us|the company)", "familiar with (us|the company)", co], a: facts, top: true });
+    const w = cards[seen.get("Why this job")];
+    if (why.length || w) put({ ...(w || { k: [] }), t: "Why " + company, k: [...((w && w.k) || []), "why " + co], ...(w && w.g ? { g: w.g } : {}), a: why.length ? why : w.a });
+    if (w) { cards.splice(seen.get("Why this job"), 1); seen.clear(); cards.forEach((c, i) => seen.set(c.t, i)); }
+  }
+  const job = lines($("co_job").value);
+  if (job.length) {
+    const c = cards[seen.get("The job")] || { t: "The job", k: ["the role", "this role", "the job", "this job", "responsibilit\\w*", "duties"], low: true };
+    put({ ...c, a: [role, ...job].filter(Boolean) });
+  }
+
+  // AI cards last: they win on a title clash.
+  const ai = $("aiCards").value.trim();
+  if (ai) {
+    let arr;
+    try { arr = JSON.parse(ai.replace(/^```(json)?|```$/gm, "")); } catch (e) { throw new Error("AI answer isn't valid JSON: " + e.message); }
+    if (!Array.isArray(arr)) arr = arr.cards;
+    if (!Array.isArray(arr)) throw new Error("AI answer should be a JSON list of cards");
+    arr.forEach(put);
+  }
+  return { name: [name, company].filter(Boolean).join(" @ ") || "My cards", role, company, lang: $("lang").value, cards };
+}
+
+function validate(d) {
+  if (!d || !Array.isArray(d.cards)) throw new Error('Deck needs a "cards" list');
+  d.cards.forEach((c, i) => {
+    if (!c.t || !Array.isArray(c.a)) throw new Error(`Card ${i + 1} needs "t" (title) and "a" (list of lines)`);
+    if (!c.k && !c.g) throw new Error(`Card "${c.t}" needs keywords in "k" or "g"`);
+    [...(c.k || []), ...(c.g || [])].forEach(k => { try { new RegExp(k); } catch (e) { throw new Error(`Card "${c.t}": bad keyword ${k}`); } });
+  });
+  return d;
+}
+function show(d) {
+  $("deck").value = JSON.stringify(d, null, 1);
+  $("chips").innerHTML = d.cards.map(c => `<span class="chip ${c.top ? "you" : ""}">${c.t.replace(/</g, "&lt;")}</span>`).join("");
+}
+const current = () => validate(JSON.parse($("deck").value));
+
+$("build").onclick = () => { try { const d = validate(buildDeck()); show(d); msg(`Built ${d.cards.length} cards. Check them below, then save.`); } catch (e) { msg(e.message, false); } };
+$("save").onclick = () => {
+  try {
+    const d = current();
+    localStorage.setItem("earpiece.deck", JSON.stringify(d));
+    location.href = "index.html";
+  } catch (e) { msg(e.message, false); }
+};
+$("download").onclick = () => {
+  try {
+    const blob = new Blob([JSON.stringify(current(), null, 1)], { type: "application/json" });
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "my-cards.json"; a.click();
+  } catch (e) { msg(e.message, false); }
+};
+$("upload").onclick = () => $("file").click();
+$("file").onchange = async () => {
+  try { const d = validate(JSON.parse(await $("file").files[0].text())); show(d); msg(`Loaded ${d.cards.length} cards. Save to use them.`); } catch (e) { msg(e.message, false); }
+};
+$("reset").onclick = async () => {
+  try { localStorage.removeItem("earpiece.deck"); } catch (_) {}
+  msg("Cleared your saved deck. Earpiece will use my-cards.json if it exists, otherwise the example deck.");
+  try { const r = await fetch("decks/example.json", { cache: "no-store" }); show(await r.json()); } catch (_) {}
+};
+
+// Load whatever deck Earpiece is using right now into the editor.
+(async () => {
+  let d = null;
+  try { d = JSON.parse(localStorage.getItem("earpiece.deck")); } catch (_) {}
+  for (const url of ["my-cards.json", "decks/example.json"]) {
+    if (d) break;
+    try { const r = await fetch(url, { cache: "no-store" }); if (r.ok) d = await r.json(); } catch (_) {}
+  }
+  if (d) show(d);
+})();
+
+// --- AI prompt ---
+$("copyPrompt").onclick = async () => {
+  const resume = $("resume").value.trim(), posting = $("posting").value.trim();
+  if (!resume) { msg("Paste your resume first.", false); return; }
+  const prompt = `You're helping me prepare live cue cards for a job interview. Each card pops up on my screen the moment the interviewer says one of its keywords, so I can glance at it mid-answer.
+
+Write the cards as a JSON array, and output ONLY the JSON. Each card:
+{"t": "short title", "k": ["specific phrases the interviewer might say"], "g": ["broad single words + common speech-to-text mishearings"], "a": ["2-4 glanceable lines, max ~10 words each"], "top": true}
+
+Rules:
+- Keywords are lowercase JavaScript regex fragments matched on whole words (e.g. "tickets?", "help ?desk", "prioriti\\\\w*"). Plural/-ing endings are added automatically for plain words.
+- "a" lines are what I should SAY: concrete, first-person facts, numbers, and short quotes. Not advice.
+- Use ONLY facts from my resume. Never invent jobs, numbers, tools or certifications. If I lack something the job wants, write an honest "haven't done X yet, closest is Y" line.
+- Make: one card per employer on my resume (keyed on the company name + likely mishearings, "top": true); one card per key tool/skill/term in the job posting (what it is in plain words + my experience with it, "top": true); cards for "tell me about yourself", strengths, weakness, why this job${$("company").value ? " / why " + $("company").value : ""}, salary, and my questions for them.
+- 20-40 cards total.
+
+Job: ${$("role").value || "(see posting)"} at ${$("company").value || "(see posting)"}
+
+MY RESUME:
+${resume}
+
+JOB POSTING:
+${posting || "(not provided)"}`;
+  try { await navigator.clipboard.writeText(prompt); msg("Prompt copied. Paste it into your AI chat, then paste the answer below."); }
+  catch (_) { $("aiCards").value = prompt; msg("Couldn't reach the clipboard, so the prompt is in the box below. Copy it from there.", false); }
+};
+</script>
+</body>
+</html>

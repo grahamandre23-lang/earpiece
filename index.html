@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Earpiece</title>
+<style>
+  :root { --bg:#0b0f14; --card:#141b24; --line:#223040; --text:#e6edf3; --dim:#8b98a5; --hit:#22d3a6; --hot:#ffd166; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:17px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  header { position:sticky; top:0; z-index:2; background:var(--bg); border-bottom:1px solid var(--line); padding:10px 14px; display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  button { background:#1d2733; color:var(--text); border:1px solid var(--line); border-radius:8px; padding:7px 12px; font:inherit; cursor:pointer; }
+  button.on { border-color:var(--hit); color:var(--hit); }
+  button.paused { background:var(--hot); color:#111; border-color:var(--hot); font-weight:600; }
+  body.paused main { opacity:.95; }
+  body.paused header { box-shadow:inset 0 -3px 0 var(--hot); }
+  #status { color:var(--dim); font-size:13px; margin-left:auto; }
+  main { padding:12px 14px 160px; display:grid; gap:10px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px 14px; }
+  .card.latest { border-color:var(--hot); box-shadow:0 0 0 1px var(--hot); }
+  .card h3 { margin:0 0 4px; font-size:24px; }
+  .card .why { color:var(--dim); font-size:13px; margin-bottom:6px; }
+  .card .why b { color:var(--hit); }
+  .card ul { margin:4px 0 0; padding-left:18px; }
+  .card li { margin:4px 0; font-size:21px; line-height:1.35; }
+  #empty { color:var(--dim); text-align:center; padding:40px 0; }
+  footer { position:fixed; bottom:0; left:0; right:0; background:#070a0e; border-top:1px solid var(--line); padding:8px 14px; max-height:140px; overflow-y:auto; font-size:13px; color:var(--dim); }
+  footer .interim { color:#5d6b78; font-style:italic; }
+  mark { background:none; color:var(--hit); font-weight:600; }
+</style>
+</head>
+<body>
+<header>
+  <button id="btnMeeting">🔊 Listen to meeting audio</button>
+  <button id="btnMic">🎙 Listen to my mic</button>
+  <button id="btnPause">⏸ Pause cards</button>
+  <button id="btnStop">■ Stop</button>
+  <button id="btnClear">Clear cards</button>
+  <span id="status">Idle</span><span id="deckInfo" style="color:var(--dim);font-size:12px"></span><a href="setup.html" style="color:var(--hit);font-size:13px">⚙ Set up my cards</a>
+</header>
+<main id="cards"><div id="empty">Cards pop up here when a keyword is heard.<br>Newest is on top and outlined in yellow.<br><br>No cards of your own yet? <a href="setup.html" style="color:var(--hit)">Set them up</a> or try the <a href="#demo" onclick="setTimeout(()=>location.reload())" style="color:var(--hit)">demo</a>.</div></main>
+<footer id="log"></footer>
+
+<script>
+// Your deck comes from (first found): cards saved by setup.html in this browser → my-cards.json → decks/example.json.
+// Card: t = title, k = specific phrases (regex), g = broad words/mishearings, a = what to say, top = boost, low = only if nothing else matches.
+let CARDS = [], DECK = {};
+async function loadDeck() {
+  try { const saved = localStorage.getItem("earpiece.deck"); if (saved) return JSON.parse(saved); } catch (_) {}
+  for (const url of ["my-cards.json", "decks/example.json"]) {
+    try { const r = await fetch(url, { cache: "no-store" }); if (r.ok) return await r.json(); } catch (_) {}
+  }
+  return { name: "Empty", cards: [] };
+}
+
+if (location.protocol === "file:") {
+  document.getElementById("status").textContent = "Run serve.py and open http://localhost:8765 — Chrome needs that for audio + loading your cards";
+}
+const stem = k => /^[a-z' -]+$/i.test(k) ? k + "(s|es|ed|d|ing|'s)?" : k;
+// Interviewer says "your/yourself/you", you say "my/myself/I/me" — every keyword matches both.
+const person = k => k
+  .replace(/\byourself\b/gi, "(?:yourself|myself)")
+  .replace(/\byours\b/gi, "(?:yours|mine)")
+  .replace(/\byour\b/gi, "(?:your|my|our)")
+  .replace(/\byou('?ve|'?re|'?d|'?ll)?\b/gi, (m, t) => "(?:you" + (t || "") + "|i" + (t ? "(?:" + t.replace("'", "'?") + ")?" : "") + "|me|we)");
+const mk = list => list && list.length ? new RegExp("\\b(" + list.map(k => person(stem(k))).join("|") + ")\\b", "i") : null;
+let rx = [], rxg = [];
+function useDeck(d) {
+  DECK = d; CARDS = d.cards || [];
+  rx = CARDS.map(c => mk(c.k));       // specific phrases
+  rxg = CARDS.map(c => mk(c.g));      // broad single words (fallback)
+  document.getElementById("deckInfo").textContent = (d.name ? d.name + " · " : "") + CARDS.length + " cards";
+  if (d.lang && rec) rec.lang = d.lang;
+}
+const cardsEl = document.getElementById("cards"), logEl = document.getElementById("log"), statusEl = document.getElementById("status");
+const lastShown = new Map();          // card index -> time last popped
+const COOLDOWN = 4000;                // only absorbs repeats while the same sentence is still being transcribed
+let paused = false;
+let rec = null, wantRunning = false, currentTrack = null, source = null, interimEl = null;
+
+const esc = s => s.replace(/[&<>"]/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]));
+
+function check(text, final) {
+  if (paused) return "→ paused";      // still listening, just no new cards
+  // Score: specific phrase > broad word; employer/term cards get a bonus only on specific phrases;
+  // longer matched phrase = more specific. Best 2 cards per sentence pop.
+  const hits = [];
+  CARDS.forEach((c, i) => {
+    let m = rx[i] && text.match(rx[i]), score;
+    if (m) score = 1000 + (c.top ? 500 : 0) + m[0].length;
+    else if (rxg[i] && (m = text.match(rxg[i]))) score = m[0].length;
+    else return;
+    if (c.low) score -= 900;
+    hits.push([i, m, score]);
+  });
+  const anySpecific = hits.some(([i]) => !CARDS[i].low);
+  const best = hits.filter(([i]) => !(anySpecific && CARDS[i].low)).sort((x, y) => y[2] - x[2]).slice(0, 2);
+  const notes = [];
+  best.slice().reverse().forEach(([i, m]) => {
+    const now = Date.now(), left = COOLDOWN - (now - (lastShown.get(i) || 0));
+    if (left > 0) { notes.push(CARDS[i].t); return; }
+    lastShown.set(i, now);
+    pop(i, m[0], text);
+    notes.push(CARDS[i].t);
+  });
+  return notes.length ? "→ " + notes.join(" · ") : "→ no match";
+}
+
+function pop(i, word, text) {
+  document.getElementById("empty")?.remove();
+  const c = CARDS[i];
+  document.getElementById("card" + i)?.remove();
+  cardsEl.querySelectorAll(".latest").forEach(e => e.classList.remove("latest"));
+  const el = document.createElement("div");
+  el.className = "card latest"; el.id = "card" + i;
+  el.innerHTML = `<h3>${esc(c.t)}</h3><div class="why">heard <b>"${esc(word)}"</b> · ${new Date().toLocaleTimeString()}</div><ul>${c.a.map(x => `<li>${esc(x)}</li>`).join("")}</ul>`;
+  cardsEl.prepend(el);
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function logLine(text, final, result) {
+  if (!interimEl) { interimEl = document.createElement("div"); logEl.appendChild(interimEl); }
+  let html = esc(text);
+  [...rx, ...rxg].forEach(r => { if (r) html = html.replace(new RegExp(r.source, "gi"), "<mark>$1</mark>"); });
+  interimEl.innerHTML = html + (result ? ` <span style="color:var(--hot);font-size:12px">${esc(result)}</span>` : "");
+  interimEl.className = final ? "" : "interim";
+  if (final) interimEl = null;
+  while (logEl.children.length > 40) logEl.firstChild.remove();
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function startRec() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { statusEl.textContent = "This browser has no speech recognition. Use Google Chrome."; return; }
+  rec = new SR();
+  rec.continuous = true; rec.interimResults = true; rec.lang = DECK.lang || "en-US";
+  rec.onresult = e => {
+    for (let j = e.resultIndex; j < e.results.length; j++) {
+      const r = e.results[j], text = r[0].transcript.trim();
+      if (!text) continue;
+      const result = check(text, r.isFinal);
+      logLine(text, r.isFinal, result);
+    }
+  };
+  rec.onerror = e => { if (e.error !== "no-speech" && e.error !== "aborted") statusEl.textContent = "Error: " + e.error; };
+  rec.onend = () => { if (wantRunning) setTimeout(() => { try { currentTrack ? rec.start(currentTrack) : rec.start(); } catch (_) {} }, 250); };
+  try {
+    currentTrack ? rec.start(currentTrack) : rec.start();
+    statusEl.textContent = source === "meeting" ? "Listening to meeting audio" : "Listening to your mic";
+  } catch (err) {
+    statusEl.textContent = "Could not start: " + err.message;
+    wantRunning = false;
+  }
+}
+
+function stopAll() {
+  wantRunning = false;
+  try { rec && rec.abort(); } catch (_) {}
+  if (currentTrack) { currentTrack.stop(); currentTrack = null; }
+  document.querySelectorAll("header button").forEach(b => b.classList.remove("on"));
+  statusEl.textContent = "Stopped";
+}
+
+document.getElementById("btnMeeting").onclick = async () => {
+  stopAll();
+  try {
+    // Chrome asks what to share: pick "Entire screen" + "Share system audio" (Zoom app),
+    // or the Meet tab + "Share tab audio" (Meet in Chrome). Video is dropped right away.
+    const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: { echoCancellation: false, noiseSuppression: false }, systemAudio: "include" });
+    stream.getVideoTracks().forEach(t => t.stop());
+    const track = stream.getAudioTracks()[0];
+    if (!track) { statusEl.textContent = "No audio shared. Try again and tick \"Share system audio\" / \"Share tab audio\"."; return; }
+    track.onended = () => { if (source === "meeting") stopAll(); };
+    currentTrack = track; source = "meeting"; wantRunning = true;
+    document.getElementById("btnMeeting").classList.add("on");
+    startRec();
+  } catch (err) { statusEl.textContent = "Share cancelled: " + err.message; }
+};
+
+document.getElementById("btnMic").onclick = () => {
+  stopAll();
+  source = "mic"; wantRunning = true;
+  document.getElementById("btnMic").classList.add("on");
+  startRec();
+};
+document.getElementById("btnStop").onclick = stopAll;
+const pauseBtn = document.getElementById("btnPause");
+function togglePause() {
+  paused = !paused;
+  pauseBtn.textContent = paused ? "▶ Resume cards" : "⏸ Pause cards";
+  pauseBtn.classList.toggle("paused", paused);
+  document.body.classList.toggle("paused", paused);
+}
+pauseBtn.onclick = togglePause;
+// Drop focus after a click so the spacebar never re-presses a button.
+document.querySelectorAll("header button").forEach(b => b.addEventListener("click", () => b.blur()));
+// Spacebar also toggles pause while this tab is focused.
+document.addEventListener("keydown", e => { if (e.code === "Space" && e.target.tagName !== "INPUT") { e.preventDefault(); togglePause(); } });
+document.getElementById("btnClear").onclick = () => { cardsEl.innerHTML = ""; lastShown.clear(); };
+
+// Demo: open index.html#demo to replay a fake interview without any audio (deck can set its own "demo" lines).
+function runDemo() {
+  const lines = DECK.demo || [
+    "Hi, thanks for joining today.",
+    "So to start, tell me a little about yourself.",
+    "What would you say is your biggest weakness?",
+    "Tell me about a time you worked under pressure.",
+    "Okay. And what are your salary expectations for this role?",
+    "Great, do you have any questions for me?",
+  ];
+  statusEl.textContent = "Demo (no audio)";
+  lines.forEach((s, n) => setTimeout(() => { logLine(s, true, check(s, true)); }, 1200 * (n + 1)));
+}
+loadDeck().then(d => { useDeck(d); if (location.hash === "#demo") runDemo(); });
+
+// Tell the user when index.html changed on disk (served by serve.py), without killing a live session.
+let loadedStamp = null;
+async function checkForUpdate() {
+  try {
+    const r = await fetch(location.pathname, { method: "HEAD", cache: "no-store" });
+    const stamp = r.headers.get("Last-Modified");
+    if (loadedStamp === null) loadedStamp = stamp;
+    else if (stamp && stamp !== loadedStamp && !document.getElementById("updBar")) {
+      const b = document.createElement("div");
+      b.id = "updBar";
+      b.style.cssText = "background:var(--hot);color:#111;padding:8px 14px;font-weight:600;cursor:pointer";
+      b.textContent = "New version available — click here to reload (you'll need to start listening again)";
+      b.onclick = () => location.reload();
+      document.body.prepend(b);
+    }
+  } catch (_) {}
+}
+if (location.protocol.startsWith("http")) { checkForUpdate(); setInterval(checkForUpdate, 5000); }
+</script>
+</body>
+</html>
